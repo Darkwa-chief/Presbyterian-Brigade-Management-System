@@ -1,0 +1,18 @@
+# Secrets / keys
+.env
+.env.*
+
+# Dependencies
+vendor/
+node_modules/
+
+# Uploads (if used)
+uploads/
+
+# Logs
+*.log
+
+# OS / Editor
+.vscode/
+.DS_Store
+Thumbs.db
