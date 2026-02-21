@@ -142,7 +142,7 @@ Update your config/database.php if necessary.
 
 Clone the repository:
 
-git clone https://github.com/yourusername/presbyterian-brigade-management-system.git
+git clone https://github.com/Darkwa-chief/presbyterian-brigade-management-system.git
 
 Move project into your server directory:
 
