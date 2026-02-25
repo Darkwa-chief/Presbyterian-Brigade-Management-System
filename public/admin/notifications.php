@@ -35,13 +35,94 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ];
         
         try {
-            $newNotificationId = $notificationModel->create($data);
-            logAudit($_SESSION['user_id'], 'create_notification', 'notifications', $newNotificationId, null, $data);
-            setFlashMessage('success', 'Notification created successfully.');
+            $emailSent = 0;
+            $inAppCreated = false;
+            
+            // Create in-app notification if checked
+            if (isset($_POST['send_in_app'])) {
+                $newNotificationId = $notificationModel->create($data);
+                logAudit($_SESSION['user_id'], 'create_notification', 'notifications', $newNotificationId, null, $data);
+                $inAppCreated = true;
+            }
+            
+            // Send email if checked
+            if (isset($_POST['send_email'])) {
+                require_once __DIR__ . '/../../classes/Email.php';
+                require_once __DIR__ . '/../../classes/Brigader.php';
+                
+                $emailClass = new Email();
+                $brigaderModel = new Brigader();
+                $userModel = new User();
+                
+                // Get recipient emails based on target role
+                $recipients = [];
+                
+                if ($data['target_role'] === 'all') {
+                    // Get all users
+                    $users = $userModel->getAll(['status' => 'active']);
+                    foreach ($users as $u) {
+                        if (!empty($u['email']) && filter_var($u['email'], FILTER_VALIDATE_EMAIL)) {
+                            $recipients[] = $u['email'];
+                        }
+                    }
+                    
+                    // Get all brigaders
+                    $brigaders = $brigaderModel->getAll(['status' => 'active']);
+                    foreach ($brigaders as $b) {
+                        if (!empty($b['email']) && filter_var($b['email'], FILTER_VALIDATE_EMAIL)) {
+                            $recipients[] = $b['email'];
+                        }
+                    }
+                } elseif ($data['target_role'] === 'member') {
+                    // Get brigader emails
+                    $brigaders = $brigaderModel->getAll(['status' => 'active']);
+                    foreach ($brigaders as $b) {
+                        if (!empty($b['email']) && filter_var($b['email'], FILTER_VALIDATE_EMAIL)) {
+                            $recipients[] = $b['email'];
+                        }
+                    }
+                } else {
+                    // Get users with specific role (admin/officer)
+                    $users = $userModel->getAll(['role' => $data['target_role'], 'status' => 'active']);
+                    foreach ($users as $u) {
+                        if (!empty($u['email']) && filter_var($u['email'], FILTER_VALIDATE_EMAIL)) {
+                            $recipients[] = $u['email'];
+                        }
+                    }
+                }
+                
+                // Remove duplicates
+                $recipients = array_unique($recipients);
+                
+                if (!empty($recipients)) {
+                    $emailSent = $emailClass->sendCustomNotification(
+                        $data['title'],
+                        $data['message'],
+                        $recipients
+                    );
+                }
+            }
+            
+            // Set appropriate success message
+            if ($inAppCreated && $emailSent > 0) {
+                setFlashMessage('success', 
+                    "Notification created and sent to {$emailSent} email recipient(s).");
+            } elseif ($inAppCreated) {
+                setFlashMessage('success', 'Notification created successfully.');
+            } elseif ($emailSent > 0) {
+                setFlashMessage('success', 
+                    "Email sent to {$emailSent} recipient(s).");
+            } else {
+                setFlashMessage('warning', 
+                    'Notification processed but no recipients found with valid email addresses.');
+            }
+            
             redirect('notifications.php');
+            
         } catch (Exception $e) {
             $error = 'Failed to create notification: ' . $e->getMessage();
         }
+        
     } elseif (isset($_POST['update_notification'])) {
         $data = [
             'title' => sanitizeInput($_POST['title']),
@@ -60,6 +141,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Exception $e) {
             $error = 'Failed to update notification: ' . $e->getMessage();
         }
+        
     } elseif (isset($_POST['delete_notification'])) {
         try {
             $notificationModel->delete($_POST['notification_id']);
@@ -117,7 +199,7 @@ include __DIR__ . '/../includes/header.php';
                         <option value="">All Types</option>
                         <option value="general" <?php echo ($_GET['notification_type'] ?? '') === 'general' ? 'selected' : ''; ?>>General</option>
                         <option value="event" <?php echo ($_GET['notification_type'] ?? '') === 'event' ? 'selected' : ''; ?>>Event</option>
-                        <option value="promotion" <?php echo ($_GET['notification_type'] ?? '') === 'promotion' ? 'selected' : ''; ?>>Promotion</option>
+                        <option value="promotion" <?php echo ($_GET['promotion_type'] ?? '') === 'promotion' ? 'selected' : ''; ?>>Promotion</option>
                         <option value="urgent" <?php echo ($_GET['notification_type'] ?? '') === 'urgent' ? 'selected' : ''; ?>>Urgent</option>
                     </select>
                 </div>
@@ -209,7 +291,9 @@ include __DIR__ . '/../includes/header.php';
     <?php elseif ($action === 'create' || $action === 'edit'): ?>
         <!-- Notification Form -->
         <div class="glass-card" style="max-width: 700px;">
-            <h4 class="text-primary-blue mb-4"><?php echo $action === 'create' ? 'Create New Notification' : 'Edit Notification'; ?></h4>
+            <h4 class="text-primary-blue mb-4">
+                <?php echo $action === 'create' ? 'Create New Notification' : 'Edit Notification'; ?>
+            </h4>
 
             <?php if (isset($error)): ?>
                 <div class="alert alert-danger"><?php echo e($error); ?></div>
@@ -261,17 +345,47 @@ include __DIR__ . '/../includes/header.php';
                     <div class="form-text">Specify a unit name to target only that unit.</div>
                 </div>
 
+                <?php if ($action === 'create'): ?>
+                    <!-- Delivery Methods (only show when creating) -->
+                    <div class="mb-3">
+                        <label class="form-label">Delivery Methods</label>
+                        
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" 
+                                   name="send_in_app" id="send_in_app" checked>
+                            <label class="form-check-label" for="send_in_app">
+                                💬 In-App Notification (shows in system)
+                            </label>
+                        </div>
+                        
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" 
+                                   name="send_email" id="send_email">
+                            <label class="form-check-label" for="send_email">
+                                📧 Send Email (to all recipients)
+                            </label>
+                        </div>
+                        
+                        <div class="form-text">
+                            Select how you want to deliver this notification. 
+                            Email requires recipients to have valid email addresses.
+                        </div>
+                    </div>
+                <?php endif; ?>
+
                 <div class="mb-3">
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="is_active" name="is_active" 
                                <?php echo ($notification['is_active'] ?? 1) ? 'checked' : ''; ?>>
-                        <label class="form-check-label" for="is_active">Active (visible to users)</label>
+                        <label class="form-check-label" for="is_active">
+                            Active (visible to users)
+                        </label>
                     </div>
                 </div>
 
                 <div class="d-flex gap-2">
                     <button type="submit" name="<?php echo $action === 'create' ? 'create_notification' : 'update_notification'; ?>" class="btn btn-primary">
-                        <?php echo $action === 'create' ? 'Create Notification' : 'Update Notification'; ?>
+                        <?php echo $action === 'create' ? 'Create & Send Notification' : 'Update Notification'; ?>
                     </button>
                     <a href="notifications.php" class="btn btn-secondary">Cancel</a>
                 </div>
