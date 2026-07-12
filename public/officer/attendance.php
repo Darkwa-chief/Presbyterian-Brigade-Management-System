@@ -18,10 +18,12 @@ requireRole(['admin', 'officer']);
 $attendanceModel = new Attendance();
 $eventModel      = new Event();
 $brigaderModel   = new Brigader();
+$db              = Database::getInstance();
 $pageTitle       = 'Attendance';
 $eventId         = $_GET['event_id'] ?? null;
+$genderView      = $_GET['gender']   ?? 'all';
 
-// Handle form submission
+// ── POST HANDLERS ───────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['csrf_token'])) {
         validateCSRFToken($_POST['csrf_token']);
@@ -40,18 +42,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             logAudit($_SESSION['user_id'], 'mark_attendance', 'attendance', $eventId);
             setFlashMessage('success', 'Attendance saved successfully.');
-            redirect(APP_URL . '/officer/attendance.php?event_id=' . $eventId);
+            redirect(APP_URL . '/officer/attendance.php?event_id=' . $eventId
+                   . '&gender=' . ($_POST['gender_view'] ?? 'all'));
         } catch (Exception $e) {
             $error = 'Failed to save attendance: ' . $e->getMessage();
         }
     }
 }
 
-// Load event data
+// ── LOAD EVENT DATA ─────────────────────────────────────────────────────────
 $event           = null;
 $attendanceMap   = [];
 $stats           = null;
-$activeBrigaders = [];
+$allBrigaders    = [];
+$maleBrigaders   = [];
+$femaleBrigaders = [];
+$malePresent     = 0;
+$femalePresent   = 0;
 
 if ($eventId) {
     $event = $eventModel->getById($eventId);
@@ -62,14 +69,22 @@ if ($eventId) {
 
     $attendanceRecords = $attendanceModel->getEventAttendance($eventId);
     $stats             = $attendanceModel->getAttendanceStats($eventId);
-    $activeBrigaders   = $brigaderModel->getAll(['status' => 'active']);
+    $allBrigaders      = $brigaderModel->getAll(['status' => 'active']);
+
+    foreach ($allBrigaders as $b) {
+        if ($b['gender'] === 'male') $maleBrigaders[] = $b;
+        else                          $femaleBrigaders[] = $b;
+    }
 
     foreach ($attendanceRecords as $record) {
         $attendanceMap[$record['brigader_id']] = $record;
+        if ($record['status'] === 'present') {
+            if ($record['gender'] === 'male') $malePresent++;
+            else                               $femalePresent++;
+        }
     }
 }
 
-// Get recent events for selection
 $recentEvents = $eventModel->getAll([], 20, 0);
 
 include __DIR__ . '/../includes/header.php';
@@ -77,7 +92,7 @@ include __DIR__ . '/../includes/header.php';
 
 <div class="content-area">
     <?php if (!$eventId): ?>
-        <!-- Select Event -->
+        <!-- ── Select Event ──────────────────────────────────────────────── -->
         <div class="glass-card" style="max-width:700px;">
             <h4 class="text-primary-blue mb-4">Select Event for Attendance</h4>
 
@@ -91,7 +106,7 @@ include __DIR__ . '/../includes/header.php';
             <?php else: ?>
                 <div class="list-group">
                     <?php foreach ($recentEvents as $e): ?>
-                        <a href="?event_id=<?php echo $e['id']; ?>" 
+                        <a href="?event_id=<?php echo $e['id']; ?>"
                            class="list-group-item list-group-item-action">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
@@ -120,7 +135,7 @@ include __DIR__ . '/../includes/header.php';
         </div>
 
     <?php else: ?>
-        <!-- Attendance Marking -->
+        <!-- ── Attendance Header ──────────────────────────────────────── -->
         <div class="mb-3 d-flex justify-content-between align-items-start">
             <div>
                 <h3 class="text-primary-blue mb-1"><?php echo e($event['event_name']); ?></h3>
@@ -135,7 +150,7 @@ include __DIR__ . '/../includes/header.php';
             <a href="attendance.php" class="btn btn-secondary">Change Event</a>
         </div>
 
-        <!-- Stats -->
+        <!-- ── Summary Stats ──────────────────────────────────────────── -->
         <?php if ($stats && $stats['total'] > 0): ?>
             <div class="stats-grid mb-4">
                 <div class="stat-card accent-success">
@@ -175,24 +190,81 @@ include __DIR__ . '/../includes/header.php';
                     </div>
                 </div>
             </div>
+
+            <!-- Gender Mini Stats -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="stat-card" style="border-left:4px solid #1565c0;">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-title">Boys Present</div>
+                                <div class="stat-value"><?php echo $malePresent; ?></div>
+                                <div class="stat-subtitle">of <?php echo count($maleBrigaders); ?> boys</div>
+                            </div>
+                            <div class="stat-icon">👦</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="stat-card" style="border-left:4px solid #e91e8c;">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-title">Girls Present</div>
+                                <div class="stat-value"><?php echo $femalePresent; ?></div>
+                                <div class="stat-subtitle">of <?php echo count($femaleBrigaders); ?> girls</div>
+                            </div>
+                            <div class="stat-icon">👧</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         <?php endif; ?>
 
-        <!-- Attendance Table -->
+        <!-- ── Gender Tabs ─────────────────────────────────────────────── -->
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item">
+                <a class="nav-link <?php echo $genderView === 'all' ? 'active' : ''; ?>"
+                   href="?event_id=<?php echo $eventId; ?>&gender=all">
+                    👥 All (<?php echo count($allBrigaders); ?>)
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link <?php echo $genderView === 'male' ? 'active' : ''; ?>"
+                   href="?event_id=<?php echo $eventId; ?>&gender=male">
+                    👦 Boys (<?php echo count($maleBrigaders); ?>)
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link <?php echo $genderView === 'female' ? 'active' : ''; ?>"
+                   href="?event_id=<?php echo $eventId; ?>&gender=female">
+                    👧 Girls (<?php echo count($femaleBrigaders); ?>)
+                </a>
+            </li>
+        </ul>
+
+        <!-- ── Attendance Table ───────────────────────────────────────── -->
         <div class="data-table-wrapper">
             <?php if (isset($error)): ?>
                 <div class="alert alert-danger"><?php echo e($error); ?></div>
             <?php endif; ?>
 
-            <?php if (empty($activeBrigaders)): ?>
+            <?php
+            if ($genderView === 'male')        { $brigadersToShow = $maleBrigaders;   $genderLabel = 'Boys'; }
+            elseif ($genderView === 'female')   { $brigadersToShow = $femaleBrigaders; $genderLabel = 'Girls'; }
+            else                                { $brigadersToShow = $allBrigaders;    $genderLabel = 'All Brigaders'; }
+            ?>
+
+            <?php if (empty($brigadersToShow)): ?>
                 <div class="empty-state">
                     <div class="empty-state-icon">👥</div>
-                    <div class="empty-state-title">No Brigaders Found</div>
-                    <div class="empty-state-text">No active brigaders to mark attendance for.</div>
+                    <div class="empty-state-title">No <?php echo $genderLabel; ?></div>
+                    <div class="empty-state-text">No active <?php echo strtolower($genderLabel); ?> found.</div>
                 </div>
             <?php else: ?>
                 <form method="POST">
                     <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
                     <input type="hidden" name="event_id" value="<?php echo $eventId; ?>">
+                    <input type="hidden" name="gender_view" value="<?php echo $genderView; ?>">
 
                     <div class="table-responsive">
                         <table class="table table-hover">
@@ -200,6 +272,7 @@ include __DIR__ . '/../includes/header.php';
                                 <tr>
                                     <th>Brigade ID</th>
                                     <th>Name</th>
+                                    <th>Gender</th>
                                     <th>Unit</th>
                                     <th>Rank</th>
                                     <th>Status</th>
@@ -207,30 +280,38 @@ include __DIR__ . '/../includes/header.php';
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($activeBrigaders as $brigader): ?>
+                                <?php foreach ($brigadersToShow as $brigader): ?>
                                     <?php
                                     $existing      = $attendanceMap[$brigader['id']] ?? null;
                                     $currentStatus = $existing ? $existing['status'] : 'present';
-                                    $currentNotes  = $existing ? $existing['notes'] : '';
+                                    $currentNotes  = $existing ? $existing['notes']  : '';
                                     ?>
                                     <tr>
                                         <td><strong><?php echo e($brigader['brigade_id']); ?></strong></td>
                                         <td><?php echo e($brigader['first_name'] . ' ' . $brigader['last_name']); ?></td>
+                                        <td>
+                                            <?php if ($brigader['gender'] === 'male'): ?>
+                                                <span style="color:#1565c0;">👦</span>
+                                            <?php else: ?>
+                                                <span style="color:#e91e8c;">👧</span>
+                                            <?php endif; ?>
+                                        </td>
                                         <td><?php echo e($brigader['unit']); ?></td>
                                         <td><?php echo e($brigader['rank_name'] ?? 'N/A'); ?></td>
                                         <td>
-                                            <select name="attendance[<?php echo $brigader['id']; ?>]" 
-                                                    class="form-select form-select-sm" style="width:130px;">
+                                            <select name="attendance[<?php echo $brigader['id']; ?>]"
+                                                    class="form-select form-select-sm"
+                                                    style="width:130px;">
                                                 <option value="present" <?php echo $currentStatus === 'present' ? 'selected' : ''; ?>>Present</option>
-                                                <option value="absent" <?php echo $currentStatus === 'absent' ? 'selected' : ''; ?>>Absent</option>
+                                                <option value="absent"  <?php echo $currentStatus === 'absent'  ? 'selected' : ''; ?>>Absent</option>
                                                 <option value="excused" <?php echo $currentStatus === 'excused' ? 'selected' : ''; ?>>Excused</option>
-                                                <option value="late" <?php echo $currentStatus === 'late' ? 'selected' : ''; ?>>Late</option>
+                                                <option value="late"    <?php echo $currentStatus === 'late'    ? 'selected' : ''; ?>>Late</option>
                                             </select>
                                         </td>
                                         <td>
-                                            <input type="text" 
-                                                   name="notes[<?php echo $brigader['id']; ?>]" 
-                                                   class="form-control form-control-sm" 
+                                            <input type="text"
+                                                   name="notes[<?php echo $brigader['id']; ?>]"
+                                                   class="form-control form-control-sm"
                                                    placeholder="Optional"
                                                    value="<?php echo e($currentNotes); ?>">
                                         </td>

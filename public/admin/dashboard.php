@@ -66,19 +66,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Live statistics
-$totalBrigaders  = $brigaderModel->count(['status' => 'active']);
-$totalUsers      = count($userModel->getAll(['status' => 'active']));
+// ── STATISTICS ─────────────────────────────────────────────────────────────
+
+// Total active brigaders
+$totalBrigaders = $brigaderModel->count(['status' => 'active']);
+
+// Male brigaders (active)
+$maleBrigaders = $db->fetchOne(
+    "SELECT COUNT(*) as count FROM brigaders
+     WHERE status = 'active' AND gender = 'male'"
+)['count'];
+
+// Female brigaders (active)
+$femaleBrigaders = $db->fetchOne(
+    "SELECT COUNT(*) as count FROM brigaders
+     WHERE status = 'active' AND gender = 'female'"
+)['count'];
+
+// Number of officers registered (users with role = officer)
+$totalOfficers = $db->fetchOne(
+    "SELECT COUNT(*) as count FROM users
+     WHERE role = 'officer' AND status = 'active'"
+)['count'];
+
+// Total active users (all roles)
+$totalUsers = count($userModel->getAll(['status' => 'active']));
+
+// Event counts
 $scheduledEvents = $db->fetchOne(
     "SELECT COUNT(*) as count FROM events WHERE status = 'scheduled'"
 )['count'];
+
 $completedEvents = $db->fetchOne(
     "SELECT COUNT(*) as count FROM events WHERE status = 'completed'"
 )['count'];
-$totalEvents     = $db->fetchOne(
+
+$totalEvents = $db->fetchOne(
     "SELECT COUNT(*) as count FROM events"
 )['count'];
-$totalRecitals   = $db->fetchOne(
+
+$totalRecitals = $db->fetchOne(
     "SELECT COUNT(*) as count FROM recitals WHERE is_active = 1"
 )['count'];
 
@@ -88,7 +115,10 @@ $recentActivity   = $db->fetchAll(
     "SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 10"
 );
 $rankDistribution = $db->fetchAll(
-    "SELECT r.rank_name, COUNT(b.id) as count
+    "SELECT r.rank_name,
+            COUNT(b.id) as count,
+            SUM(CASE WHEN b.gender = 'male'   THEN 1 ELSE 0 END) as male_count,
+            SUM(CASE WHEN b.gender = 'female' THEN 1 ELSE 0 END) as female_count
      FROM ranks r
      LEFT JOIN brigaders b ON r.id = b.rank_id AND b.status = 'active'
      GROUP BY r.id, r.rank_name
@@ -109,7 +139,7 @@ include __DIR__ . '/../includes/header.php';
         </p>
     </div>
 
-    <!-- Statistics Cards -->
+    <!-- ── ROW 1: Main Stats ─────────────────────────────────────────────── -->
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-header">
@@ -138,9 +168,7 @@ include __DIR__ . '/../includes/header.php';
                 <div>
                     <div class="stat-title">Scheduled Events</div>
                     <div class="stat-value"><?php echo $scheduledEvents; ?></div>
-                    <div class="stat-subtitle">
-                        <?php echo $completedEvents; ?> completed
-                    </div>
+                    <div class="stat-subtitle"><?php echo $completedEvents; ?> completed</div>
                 </div>
                 <div class="stat-icon">📅</div>
             </div>
@@ -158,8 +186,66 @@ include __DIR__ . '/../includes/header.php';
         </div>
     </div>
 
-    <div class="row">
-        <!-- Events Management -->
+    <!-- ── ROW 2: Gender + Officers Stats ───────────────────────────────── -->
+    <div class="stats-grid mt-3">
+        <div class="stat-card" style="border-left: 4px solid #1565c0;">
+            <div class="stat-header">
+                <div>
+                    <div class="stat-title">Male Brigaders</div>
+                    <div class="stat-value"><?php echo $maleBrigaders; ?></div>
+                    <div class="stat-subtitle">
+                        <?php echo $totalBrigaders > 0
+                            ? round(($maleBrigaders / $totalBrigaders) * 100)
+                            : 0; ?>% of total
+                    </div>
+                </div>
+                <div class="stat-icon">👦</div>
+            </div>
+        </div>
+
+        <div class="stat-card" style="border-left: 4px solid #e91e8c;">
+            <div class="stat-header">
+                <div>
+                    <div class="stat-title">Female Brigaders</div>
+                    <div class="stat-value"><?php echo $femaleBrigaders; ?></div>
+                    <div class="stat-subtitle">
+                        <?php echo $totalBrigaders > 0
+                            ? round(($femaleBrigaders / $totalBrigaders) * 100)
+                            : 0; ?>% of total
+                    </div>
+                </div>
+                <div class="stat-icon">👧</div>
+            </div>
+        </div>
+
+        <div class="stat-card" style="border-left: 4px solid #ff6f00;">
+            <div class="stat-header">
+                <div>
+                    <div class="stat-title">Registered Officers</div>
+                    <div class="stat-value"><?php echo $totalOfficers; ?></div>
+                    <div class="stat-subtitle">Active officer accounts</div>
+                </div>
+                <div class="stat-icon">🎖️</div>
+            </div>
+        </div>
+
+        <div class="stat-card" style="border-left: 4px solid #2e7d32;">
+            <div class="stat-header">
+                <div>
+                    <div class="stat-title">Gender Ratio</div>
+                    <div class="stat-value">
+                        <?php echo $maleBrigaders; ?>M /
+                        <?php echo $femaleBrigaders; ?>F
+                    </div>
+                    <div class="stat-subtitle">Male / Female</div>
+                </div>
+                <div class="stat-icon">⚖️</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <!-- ── Events Management ──────────────────────────────────────────── -->
         <div class="col-lg-7 mb-4">
             <div class="glass-card">
                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -199,9 +285,7 @@ include __DIR__ . '/../includes/header.php';
                                 <?php foreach ($allRecentEvents as $event): ?>
                                     <tr>
                                         <td>
-                                            <strong>
-                                                <?php echo e($event['event_name']); ?>
-                                            </strong>
+                                            <strong><?php echo e($event['event_name']); ?></strong>
                                             <br>
                                             <small class="text-muted">
                                                 <?php echo ucfirst($event['event_type']); ?>
@@ -211,26 +295,17 @@ include __DIR__ . '/../includes/header.php';
                                             </small>
                                         </td>
                                         <td>
-                                            <small>
-                                                <?php echo formatDate($event['event_date']); ?>
-                                            </small>
+                                            <small><?php echo formatDate($event['event_date']); ?></small>
                                         </td>
-                                        <td>
-                                            <?php echo getStatusBadge($event['status']); ?>
-                                        </td>
+                                        <td><?php echo getStatusBadge($event['status']); ?></td>
                                         <td>
                                             <div class="d-flex gap-1 flex-wrap">
-
                                                 <?php if ($event['status'] === 'scheduled' || $event['status'] === 'ongoing'): ?>
                                                     <form method="POST" class="d-inline">
-                                                        <input type="hidden" name="csrf_token"
-                                                               value="<?php echo generateCSRFToken(); ?>">
-                                                        <input type="hidden" name="event_id"
-                                                               value="<?php echo $event['id']; ?>">
-                                                        <input type="hidden" name="new_status"
-                                                               value="completed">
-                                                        <button type="submit"
-                                                                name="update_event_status"
+                                                        <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
+                                                        <input type="hidden" name="event_id" value="<?php echo $event['id']; ?>">
+                                                        <input type="hidden" name="new_status" value="completed">
+                                                        <button type="submit" name="update_event_status"
                                                                 class="btn btn-sm btn-success"
                                                                 onclick="return confirm('Mark as completed?')">
                                                             ✓ Done
@@ -240,14 +315,10 @@ include __DIR__ . '/../includes/header.php';
 
                                                 <?php if ($event['status'] === 'scheduled'): ?>
                                                     <form method="POST" class="d-inline">
-                                                        <input type="hidden" name="csrf_token"
-                                                               value="<?php echo generateCSRFToken(); ?>">
-                                                        <input type="hidden" name="event_id"
-                                                               value="<?php echo $event['id']; ?>">
-                                                        <input type="hidden" name="new_status"
-                                                               value="cancelled">
-                                                        <button type="submit"
-                                                                name="update_event_status"
+                                                        <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
+                                                        <input type="hidden" name="event_id" value="<?php echo $event['id']; ?>">
+                                                        <input type="hidden" name="new_status" value="cancelled">
+                                                        <button type="submit" name="update_event_status"
                                                                 class="btn btn-sm btn-warning"
                                                                 onclick="return confirm('Cancel this event?')">
                                                             ✗ Cancel
@@ -256,23 +327,17 @@ include __DIR__ . '/../includes/header.php';
                                                 <?php endif; ?>
 
                                                 <a href="<?php echo APP_URL; ?>/admin/events.php?action=edit&id=<?php echo $event['id']; ?>"
-                                                   class="btn btn-sm btn-secondary">
-                                                    Edit
-                                                </a>
+                                                   class="btn btn-sm btn-secondary">Edit</a>
 
                                                 <form method="POST" class="d-inline">
-                                                    <input type="hidden" name="csrf_token"
-                                                           value="<?php echo generateCSRFToken(); ?>">
-                                                    <input type="hidden" name="event_id"
-                                                           value="<?php echo $event['id']; ?>">
-                                                    <button type="submit"
-                                                            name="delete_event"
+                                                    <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
+                                                    <input type="hidden" name="event_id" value="<?php echo $event['id']; ?>">
+                                                    <button type="submit" name="delete_event"
                                                             class="btn btn-sm btn-danger"
                                                             onclick="return confirm('Delete this event permanently?')">
                                                         🗑️
                                                     </button>
                                                 </form>
-
                                             </div>
                                         </td>
                                     </tr>
@@ -282,19 +347,17 @@ include __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="text-center mt-2">
                         <a href="<?php echo APP_URL; ?>/admin/events.php"
-                           class="btn btn-secondary btn-sm">
-                            View All Events
-                        </a>
+                           class="btn btn-secondary btn-sm">View All Events</a>
                     </div>
                 <?php endif; ?>
             </div>
         </div>
 
-        <!-- Rank Distribution -->
+        <!-- ── Rank Distribution with Gender ─────────────────────────────── -->
         <div class="col-lg-5 mb-4">
             <div class="glass-card">
                 <h5 class="text-primary-blue mb-3">
-                    Brigader Distribution by Rank
+                    Brigaders by Rank &amp; Gender
                 </h5>
                 <?php if (empty($rankDistribution)): ?>
                     <p class="text-muted">No rank data available.</p>
@@ -303,27 +366,46 @@ include __DIR__ . '/../includes/header.php';
                         <div class="mb-3">
                             <div class="d-flex justify-content-between mb-1">
                                 <strong><?php echo e($rank['rank_name']); ?></strong>
-                                <span class="badge badge-primary">
-                                    <?php echo $rank['count']; ?>
+                                <span>
+                                    <span class="badge badge-primary"><?php echo $rank['count']; ?> total</span>
+                                    <span class="badge ms-1" style="background:#1565c0;">
+                                        👦 <?php echo $rank['male_count']; ?>
+                                    </span>
+                                    <span class="badge ms-1" style="background:#e91e8c;">
+                                        👧 <?php echo $rank['female_count']; ?>
+                                    </span>
                                 </span>
                             </div>
                             <div class="progress" style="height:8px;">
+                                <!-- Male bar (blue) -->
                                 <div class="progress-bar"
-                                     role="progressbar"
                                      style="width:<?php echo $totalBrigaders > 0
-                                         ? round($rank['count'] / $totalBrigaders * 100)
+                                         ? round(($rank['male_count'] / $totalBrigaders) * 100)
                                          : 0; ?>%;
-                                            background:var(--primary-blue);">
+                                            background:#1565c0;">
+                                </div>
+                                <!-- Female bar (pink) -->
+                                <div class="progress-bar"
+                                     style="width:<?php echo $totalBrigaders > 0
+                                         ? round(($rank['female_count'] / $totalBrigaders) * 100)
+                                         : 0; ?>%;
+                                            background:#e91e8c;">
                                 </div>
                             </div>
                         </div>
                     <?php endforeach; ?>
+
+                    <!-- Legend -->
+                    <div class="d-flex gap-3 mt-3">
+                        <span><span style="display:inline-block;width:12px;height:12px;background:#1565c0;border-radius:2px;"></span> Male</span>
+                        <span><span style="display:inline-block;width:12px;height:12px;background:#e91e8c;border-radius:2px;"></span> Female</span>
+                    </div>
                 <?php endif; ?>
             </div>
         </div>
     </div>
 
-    <!-- Recent Activity / Audit Logs -->
+    <!-- ── Recent Activity / Audit Logs ──────────────────────────────────── -->
     <div class="glass-card">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="text-primary-blue mb-0">Recent Activity</h5>
@@ -336,8 +418,7 @@ include __DIR__ . '/../includes/header.php';
                     <li>
                         <form method="POST" class="px-3 py-2"
                               onsubmit="return confirm('Clear logs older than 30 days?');">
-                            <input type="hidden" name="csrf_token"
-                                   value="<?php echo generateCSRFToken(); ?>">
+                            <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
                             <input type="hidden" name="days" value="30">
                             <button type="submit" name="clear_old_logs"
                                     class="btn btn-sm btn-warning w-100">
@@ -348,8 +429,7 @@ include __DIR__ . '/../includes/header.php';
                     <li>
                         <form method="POST" class="px-3 py-2"
                               onsubmit="return confirm('Clear logs older than 90 days?');">
-                            <input type="hidden" name="csrf_token"
-                                   value="<?php echo generateCSRFToken(); ?>">
+                            <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
                             <input type="hidden" name="days" value="90">
                             <button type="submit" name="clear_old_logs"
                                     class="btn btn-sm btn-warning w-100">
@@ -361,8 +441,7 @@ include __DIR__ . '/../includes/header.php';
                     <li>
                         <form method="POST" class="px-3 py-2"
                               onsubmit="return confirm('Delete ALL logs?');">
-                            <input type="hidden" name="csrf_token"
-                                   value="<?php echo generateCSRFToken(); ?>">
+                            <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
                             <button type="submit" name="clear_all_logs"
                                     class="btn btn-sm btn-danger w-100">
                                 Clear All
@@ -400,10 +479,8 @@ include __DIR__ . '/../includes/header.php';
                                 <td>
                                     <form method="POST" class="d-inline"
                                           onsubmit="return confirm('Delete this log?');">
-                                        <input type="hidden" name="csrf_token"
-                                               value="<?php echo generateCSRFToken(); ?>">
-                                        <input type="hidden" name="log_id"
-                                               value="<?php echo $log['id']; ?>">
+                                        <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
+                                        <input type="hidden" name="log_id" value="<?php echo $log['id']; ?>">
                                         <button type="submit" name="delete_log"
                                                 class="btn btn-sm btn-danger">
                                             Delete
