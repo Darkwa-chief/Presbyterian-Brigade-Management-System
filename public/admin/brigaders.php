@@ -102,7 +102,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
     } elseif (isset($_POST['export_csv'])) {
-        // ── Build filters from hidden inputs ──
         $exportFilters = [];
         if (!empty($_POST['search']))  $exportFilters['search']  = $_POST['search'];
         if (!empty($_POST['status']))  $exportFilters['status']  = $_POST['status'];
@@ -112,27 +111,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $brigaders = $brigaderModel->getAll($exportFilters);
 
-        // ── Determine filename ──
-        $genderLabel = '';
-        if (!empty($exportFilters['gender'])) {
-            $genderLabel = '_' . $exportFilters['gender'];
-        }
-        $filename = 'brigaders' . $genderLabel . '_' . date('Y-m-d') . '.csv';
+        $genderLabel = !empty($exportFilters['gender']) ? '_' . $exportFilters['gender'] : '';
+        $filename    = 'brigaders' . $genderLabel . '_' . date('Y-m-d') . '.csv';
 
         $csvData = [];
         foreach ($brigaders as $b) {
             $csvData[] = [
-                'Brigade ID' => $b['brigade_id'],
-                'First Name' => $b['first_name'],
-                'Last Name'  => $b['last_name'],
-                'Gender'     => ucfirst($b['gender']),
+                'Brigade ID'    => $b['brigade_id'],
+                'First Name'    => $b['first_name'],
+                'Last Name'     => $b['last_name'],
+                'Gender'        => ucfirst($b['gender']),
                 'Date of Birth' => $b['date_of_birth'],
-                'Email'      => $b['email'],
-                'Phone'      => $b['phone'],
-                'Rank'       => $b['rank_name'] ?? 'N/A',
-                'Unit'       => $b['unit'],
-                'Join Date'  => $b['join_date'],
-                'Status'     => ucfirst($b['status']),
+                'Email'         => $b['email'],
+                'Phone'         => $b['phone'],
+                'Rank'          => $b['rank_name'] ?? 'N/A',
+                'Unit'          => $b['unit'],
+                'Join Date'     => $b['join_date'],
+                'Status'        => ucfirst($b['status']),
             ];
         }
 
@@ -159,7 +154,6 @@ if ($action === 'edit' && $brigaderId) {
 }
 
 // ── FILTERS ─────────────────────────────────────────────────────────────────
-// FIX: read gender filter from GET correctly
 $filters = [];
 if (!empty($_GET['search']))  $filters['search']  = $_GET['search'];
 if (!empty($_GET['status']))  $filters['status']  = $_GET['status'];
@@ -171,17 +165,22 @@ $currentPage = intval($_GET['page'] ?? 1);
 $pagination  = paginate($brigaderModel->count($filters), $currentPage, ITEMS_PER_PAGE);
 $brigaders   = $brigaderModel->getAll($filters, $pagination['items_per_page'], $pagination['offset']);
 
-// Gender counts for tabs
-$totalMale = $db->fetchOne(
-    "SELECT COUNT(*) as count FROM brigaders WHERE status = 'active' AND gender = 'male'"
+// Gender counts for tabs (always based on active only)
+$totalMale   = $db->fetchOne(
+    "SELECT COUNT(*) as count FROM brigaders WHERE gender = 'male' AND status = 'active'"
 )['count'];
 $totalFemale = $db->fetchOne(
-    "SELECT COUNT(*) as count FROM brigaders WHERE status = 'active' AND gender = 'female'"
+    "SELECT COUNT(*) as count FROM brigaders WHERE gender = 'female' AND status = 'active'"
 )['count'];
-$totalAll = $brigaderModel->count(['status' => 'active']);
+$totalAll    = $db->fetchOne(
+    "SELECT COUNT(*) as count FROM brigaders WHERE status = 'active'"
+)['count'];
 
 // All ranks for dropdowns
 $ranks = $rankModel->getAll();
+
+// Current gender tab
+$currentGender = $_GET['gender'] ?? '';
 
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -193,43 +192,42 @@ include __DIR__ . '/../includes/header.php';
             <div class="table-header">
                 <h4 class="table-title">Brigaders</h4>
                 <div class="table-actions">
-                    <!-- Export current filter as CSV -->
                     <form method="POST" class="d-inline">
                         <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
                         <?php foreach ($filters as $key => $value): ?>
                             <input type="hidden" name="<?php echo e($key); ?>" value="<?php echo e($value); ?>">
                         <?php endforeach; ?>
                         <button type="submit" name="export_csv" class="btn btn-secondary">
-                            📥 Export CSV
+                            Export CSV
                         </button>
                     </form>
-                    <a href="?action=create" class="btn btn-primary">➕ Add Brigader</a>
+                    <a href="?action=create" class="btn btn-primary">Add Brigader</a>
                 </div>
             </div>
 
             <!-- ── Gender Tabs ──────────────────────────────────────────── -->
             <ul class="nav nav-tabs mb-3">
                 <li class="nav-item">
-                    <a class="nav-link <?php echo empty($_GET['gender']) ? 'active' : ''; ?>"
+                    <a class="nav-link <?php echo $currentGender === '' ? 'active' : ''; ?>"
                        href="brigaders.php">
-                        👥 All
+                        All
                         <span class="badge badge-secondary ms-1"><?php echo $totalAll; ?></span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link <?php echo ($_GET['gender'] ?? '') === 'male' ? 'active' : ''; ?>"
+                    <a class="nav-link <?php echo $currentGender === 'male' ? 'active' : ''; ?>"
                        href="brigaders.php?gender=male">
-                        👦 Boys
-                        <span class="badge ms-1" style="background:#1565c0;color:#fff;">
+                        Boys
+                        <span class="badge ms-1" style="background:#1565c0; color:#fff;">
                             <?php echo $totalMale; ?>
                         </span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link <?php echo ($_GET['gender'] ?? '') === 'female' ? 'active' : ''; ?>"
+                    <a class="nav-link <?php echo $currentGender === 'female' ? 'active' : ''; ?>"
                        href="brigaders.php?gender=female">
-                        👧 Girls
-                        <span class="badge ms-1" style="background:#e91e8c;color:#fff;">
+                        Girls
+                        <span class="badge ms-1" style="background:#c2185b; color:#fff;">
                             <?php echo $totalFemale; ?>
                         </span>
                     </a>
@@ -238,9 +236,8 @@ include __DIR__ . '/../includes/header.php';
 
             <!-- ── Filters ─────────────────────────────────────────────── -->
             <form method="GET" class="row g-3 mb-3">
-                <!-- Preserve gender tab when filtering -->
-                <?php if (!empty($_GET['gender'])): ?>
-                    <input type="hidden" name="gender" value="<?php echo e($_GET['gender']); ?>">
+                <?php if ($currentGender !== ''): ?>
+                    <input type="hidden" name="gender" value="<?php echo e($currentGender); ?>">
                 <?php endif; ?>
 
                 <div class="col-md-3">
@@ -251,9 +248,18 @@ include __DIR__ . '/../includes/header.php';
                 <div class="col-md-2">
                     <select class="form-select" name="status">
                         <option value="">All Status</option>
-                        <option value="active"      <?php echo ($_GET['status'] ?? '') === 'active'      ? 'selected' : ''; ?>>Active</option>
-                        <option value="inactive"    <?php echo ($_GET['status'] ?? '') === 'inactive'    ? 'selected' : ''; ?>>Inactive</option>
-                        <option value="transferred" <?php echo ($_GET['status'] ?? '') === 'transferred' ? 'selected' : ''; ?>>Transferred</option>
+                        <option value="active"
+                            <?php echo ($_GET['status'] ?? '') === 'active' ? 'selected' : ''; ?>>
+                            Active
+                        </option>
+                        <option value="inactive"
+                            <?php echo ($_GET['status'] ?? '') === 'inactive' ? 'selected' : ''; ?>>
+                            Inactive
+                        </option>
+                        <option value="transferred"
+                            <?php echo ($_GET['status'] ?? '') === 'transferred' ? 'selected' : ''; ?>>
+                            Transferred
+                        </option>
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -274,14 +280,17 @@ include __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="col-md-3">
                     <button type="submit" class="btn btn-primary">Filter</button>
-                    <a href="brigaders.php<?php echo !empty($_GET['gender']) ? '?gender=' . e($_GET['gender']) : ''; ?>"
-                       class="btn btn-secondary">Clear</a>
+                    <a href="brigaders.php<?php echo $currentGender !== '' ? '?gender=' . e($currentGender) : ''; ?>"
+                       class="btn btn-secondary">
+                        Clear
+                    </a>
                 </div>
             </form>
 
+            <!-- ── Results ─────────────────────────────────────────────── -->
             <?php if (empty($brigaders)): ?>
                 <div class="empty-state">
-                    <div class="empty-state-icon">👥</div>
+                    <div class="empty-state-icon">&#128100;</div>
                     <div class="empty-state-title">No Brigaders Found</div>
                     <div class="empty-state-text">
                         <?php if (!empty($filters)): ?>
@@ -293,17 +302,16 @@ include __DIR__ . '/../includes/header.php';
                     <a href="?action=create" class="btn btn-primary">Add Brigader</a>
                 </div>
             <?php else: ?>
-                <!-- Current view label -->
                 <p class="text-muted mb-2">
                     Showing
                     <strong>
                         <?php
-                        if (($_GET['gender'] ?? '') === 'male')   echo 'Boys (Male)';
-                        elseif (($_GET['gender'] ?? '') === 'female') echo 'Girls (Female)';
-                        else echo 'All Brigaders';
+                        if ($currentGender === 'male')        echo 'Boys';
+                        elseif ($currentGender === 'female')  echo 'Girls';
+                        else                                   echo 'All Brigaders';
                         ?>
                     </strong>
-                    — <?php echo $pagination['total_items']; ?> record(s)
+                    &mdash; <?php echo $pagination['total_items']; ?> record(s)
                 </p>
 
                 <div class="table-responsive">
@@ -327,9 +335,9 @@ include __DIR__ . '/../includes/header.php';
                                     <td><?php echo e($b['first_name'] . ' ' . $b['last_name']); ?></td>
                                     <td>
                                         <?php if ($b['gender'] === 'male'): ?>
-                                            <span style="color:#1565c0;">👦 Male</span>
+                                            <span class="badge" style="background:#1565c0;">Male</span>
                                         <?php else: ?>
-                                            <span style="color:#e91e8c;">👧 Female</span>
+                                            <span class="badge" style="background:#c2185b;">Female</span>
                                         <?php endif; ?>
                                     </td>
                                     <td><?php echo e($b['rank_name'] ?? 'N/A'); ?></td>
@@ -356,7 +364,7 @@ include __DIR__ . '/../includes/header.php';
         </div>
 
     <?php elseif ($action === 'create' || $action === 'edit'): ?>
-        <!-- ── Brigader Form ─────────────────────────────────────────────── -->
+
         <div class="glass-card" style="max-width:800px;">
             <h4 class="text-primary-blue mb-4">
                 <?php echo $action === 'create' ? 'Add New Brigader' : 'Edit Brigader'; ?>
@@ -395,8 +403,14 @@ include __DIR__ . '/../includes/header.php';
                         <label class="form-label">Gender</label>
                         <select class="form-select" name="gender" required>
                             <option value="">Select Gender</option>
-                            <option value="male"   <?php echo ($brigader['gender'] ?? '') === 'male'   ? 'selected' : ''; ?>>👦 Male (Boy)</option>
-                            <option value="female" <?php echo ($brigader['gender'] ?? '') === 'female' ? 'selected' : ''; ?>>👧 Female (Girl)</option>
+                            <option value="male"
+                                <?php echo ($brigader['gender'] ?? '') === 'male' ? 'selected' : ''; ?>>
+                                Male (Boy)
+                            </option>
+                            <option value="female"
+                                <?php echo ($brigader['gender'] ?? '') === 'female' ? 'selected' : ''; ?>>
+                                Female (Girl)
+                            </option>
                         </select>
                     </div>
                 </div>
@@ -416,7 +430,8 @@ include __DIR__ . '/../includes/header.php';
 
                 <div class="mb-3">
                     <label class="form-label">Address</label>
-                    <textarea class="form-control" name="address" rows="2"><?php echo e($brigader['address'] ?? ''); ?></textarea>
+                    <textarea class="form-control" name="address"
+                              rows="2"><?php echo e($brigader['address'] ?? ''); ?></textarea>
                 </div>
 
                 <div class="row">
@@ -448,9 +463,18 @@ include __DIR__ . '/../includes/header.php';
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Status</label>
                         <select class="form-select" name="status" required>
-                            <option value="active"      <?php echo ($brigader['status'] ?? 'active') === 'active'      ? 'selected' : ''; ?>>Active</option>
-                            <option value="inactive"    <?php echo ($brigader['status'] ?? '') === 'inactive'    ? 'selected' : ''; ?>>Inactive</option>
-                            <option value="transferred" <?php echo ($brigader['status'] ?? '') === 'transferred' ? 'selected' : ''; ?>>Transferred</option>
+                            <option value="active"
+                                <?php echo ($brigader['status'] ?? 'active') === 'active' ? 'selected' : ''; ?>>
+                                Active
+                            </option>
+                            <option value="inactive"
+                                <?php echo ($brigader['status'] ?? '') === 'inactive' ? 'selected' : ''; ?>>
+                                Inactive
+                            </option>
+                            <option value="transferred"
+                                <?php echo ($brigader['status'] ?? '') === 'transferred' ? 'selected' : ''; ?>>
+                                Transferred
+                            </option>
                         </select>
                     </div>
                     <div class="col-md-6 mb-3">
@@ -467,7 +491,7 @@ include __DIR__ . '/../includes/header.php';
                         <div>
                             <img src="<?php echo APP_URL . '/' . $brigader['passport_photo']; ?>"
                                  alt="Passport Photo"
-                                 style="max-width:150px;border-radius:8px;">
+                                 style="max-width:150px; border-radius:8px;">
                         </div>
                     </div>
                 <?php endif; ?>
@@ -484,7 +508,7 @@ include __DIR__ . '/../includes/header.php';
         </div>
 
     <?php elseif ($action === 'view'): ?>
-        <!-- ── Brigader Profile View ──────────────────────────────────────── -->
+
         <div class="row">
             <div class="col-lg-4">
                 <div class="glass-card text-center">
@@ -494,7 +518,8 @@ include __DIR__ . '/../includes/header.php';
                              class="img-fluid rounded mb-3"
                              style="max-width:200px;">
                     <?php else: ?>
-                        <div class="mb-3" style="font-size:100px;">👤</div>
+                        <div class="mb-3"
+                             style="font-size:80px; color:#ccc;">&#128100;</div>
                     <?php endif; ?>
 
                     <h4 class="text-primary-blue">
@@ -511,13 +536,17 @@ include __DIR__ . '/../includes/header.php';
                         <p>
                             <strong>Gender:</strong>
                             <?php if ($brigader['gender'] === 'male'): ?>
-                                <span style="color:#1565c0;">👦 Male (Boy)</span>
+                                <span class="badge" style="background:#1565c0;">Male</span>
                             <?php else: ?>
-                                <span style="color:#e91e8c;">👧 Female (Girl)</span>
+                                <span class="badge" style="background:#c2185b;">Female</span>
                             <?php endif; ?>
                         </p>
-                        <p><strong>Date of Birth:</strong> <?php echo formatDate($brigader['date_of_birth']); ?></p>
-                        <p><strong>Join Date:</strong> <?php echo formatDate($brigader['join_date']); ?></p>
+                        <p><strong>Date of Birth:</strong>
+                            <?php echo formatDate($brigader['date_of_birth']); ?>
+                        </p>
+                        <p><strong>Join Date:</strong>
+                            <?php echo formatDate($brigader['join_date']); ?>
+                        </p>
                         <?php if ($brigader['email']): ?>
                             <p><strong>Email:</strong> <?php echo e($brigader['email']); ?></p>
                         <?php endif; ?>
@@ -528,14 +557,17 @@ include __DIR__ . '/../includes/header.php';
 
                     <div class="mt-3">
                         <a href="?action=edit&id=<?php echo $brigader['id']; ?>"
-                           class="btn btn-primary w-100 mb-2">Edit Profile</a>
-                        <a href="brigaders.php" class="btn btn-secondary w-100">Back to List</a>
+                           class="btn btn-primary w-100 mb-2">
+                            Edit Profile
+                        </a>
+                        <a href="brigaders.php" class="btn btn-secondary w-100">
+                            Back to List
+                        </a>
                     </div>
                 </div>
             </div>
 
             <div class="col-lg-8">
-                <!-- Promotion History -->
                 <div class="glass-card mb-3">
                     <h5 class="text-primary-blue mb-3">Promotion History</h5>
                     <?php if (empty($promotionHistory)): ?>
@@ -566,7 +598,6 @@ include __DIR__ . '/../includes/header.php';
                     <?php endif; ?>
                 </div>
 
-                <!-- Attendance History -->
                 <div class="glass-card">
                     <h5 class="text-primary-blue mb-3">Recent Attendance</h5>
                     <?php if (empty($attendanceHistory)): ?>
@@ -598,6 +629,7 @@ include __DIR__ . '/../includes/header.php';
                 </div>
             </div>
         </div>
+
     <?php endif; ?>
 </div>
 
