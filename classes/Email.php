@@ -1,6 +1,5 @@
 <?php
 // classes/Email.php
-// an email feature
 
 // Load PHPMailer files manually
 require_once __DIR__ . '/../vendor/phpmailer/phpmailer/src/Exception.php';
