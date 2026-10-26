@@ -29,17 +29,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         validateCSRFToken($_POST['csrf_token']);
     }
 
+    
     if (isset($_POST['mark_attendance'])) {
-        $eventId        = $_POST['event_id'];
-        $attendanceData = $_POST['attendance'] ?? [];
+    $eventId        = $_POST['event_id'];
+    $attendanceData = $_POST['attendance'] ?? [];
 
-        try {
-            foreach ($attendanceData as $brigaderId => $status) {
-                $notes = $_POST['notes'][$brigaderId] ?? '';
-                $attendanceModel->markAttendance(
-                    $eventId, $brigaderId, $status, $_SESSION['user_id'], $notes
-                );
-            }
+    try {
+        foreach ($attendanceData as $brigaderId => $status) {
+            // Skip if status is empty — means this brigader
+            // was not explicitly marked (newly enrolled)
+            if (empty($status)) continue;
+
+            $notes = $_POST['notes'][$brigaderId] ?? '';
+            $attendanceModel->markAttendance(
+                $eventId, $brigaderId, $status, $_SESSION['user_id'], $notes
+            );
+        }
             logAudit($_SESSION['user_id'], 'mark_attendance', 'attendance', $eventId);
             setFlashMessage('success', 'Attendance saved successfully.');
             redirect(APP_URL . '/officer/attendance.php?event_id=' . $eventId
@@ -283,9 +288,8 @@ include __DIR__ . '/../includes/header.php';
                                 <?php foreach ($brigadersToShow as $brigader): ?>
                                     <?php
                                     $existing      = $attendanceMap[$brigader['id']] ?? null;
-                                    $currentStatus = $existing ? $existing['status'] : 'present';
-                                    $currentNotes  = $existing ? $existing['notes']  : '';
-                                    ?>
+                                    $currentStatus = $existing ? $existing['status'] : '';
+                                    $currentNotes  = $existing ? $existing['notes']  : '';   
                                     <tr>
                                         <td><strong><?php echo e($brigader['brigade_id']); ?></strong></td>
                                         <td><?php echo e($brigader['first_name'] . ' ' . $brigader['last_name']); ?></td>
@@ -299,14 +303,18 @@ include __DIR__ . '/../includes/header.php';
                                         <td><?php echo e($brigader['unit']); ?></td>
                                         <td><?php echo e($brigader['rank_name'] ?? 'N/A'); ?></td>
                                         <td>
-                                            <select name="attendance[<?php echo $brigader['id']; ?>]"
-                                                    class="form-select form-select-sm"
-                                                    style="width:130px;">
+                                           // REPLACE WITH — adds a blank "Not marked" option at the top:
+                                        <select name="attendance[<?php echo $brigader['id']; ?>]"
+                                            class="form-select form-select-sm"
+                                            style="width:130px;">
+                                        <option value="" <?php echo $currentStatus === '' ? 'selected' : ''; ?>>
+                                            — Not marked —
+                                                </option>
                                                 <option value="present" <?php echo $currentStatus === 'present' ? 'selected' : ''; ?>>Present</option>
                                                 <option value="absent"  <?php echo $currentStatus === 'absent'  ? 'selected' : ''; ?>>Absent</option>
                                                 <option value="excused" <?php echo $currentStatus === 'excused' ? 'selected' : ''; ?>>Excused</option>
                                                 <option value="late"    <?php echo $currentStatus === 'late'    ? 'selected' : ''; ?>>Late</option>
-                                            </select>
+                                            </select> 
                                         </td>
                                         <td>
                                             <input type="text"
