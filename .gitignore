@@ -16,3 +16,7 @@ uploads/
 .vscode/
 .DS_Store
 Thumbs.db
+
+#Server configuration files - never overwrite on deployment
+config/database.php
+config/app.php
