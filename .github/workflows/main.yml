@@ -20,13 +20,11 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            script: |
-                cd /var/www/html
-                sudo mv config/database.php /home/ubuntu/database.php.bak
-                sudo mv config/app.php /home/ubuntu/app.php.bak
-                sudo git pull origin main
-                sudo cp /home/ubuntu/database.php.bak /var/www/html/config/database.php
-                sudo cp /home/ubuntu/app.php.bak /var/www/html/config/app.php
+                cd /var/www/html && sudo mv config/database.php /home/ubuntu/database.php.bak || true
+                cd /var/www/html && sudo mv config/app.php /home/ubuntu/app.php.bak || true
+                cd /var/www/html && sudo git pull origin main
+                sudo cp /home/ubuntu/database.php.bak /var/www/html/config/database.php || true
+                sudo cp /home/ubuntu/app.php.bak /var/www/html/config/app.php || true
                 sudo chown -R www-data:www-data /var/www/html/
                 sudo systemctl restart nginx
                 sudo systemctl restart php8.5-fpm
