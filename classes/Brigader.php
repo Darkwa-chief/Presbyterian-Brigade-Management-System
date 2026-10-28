@@ -37,6 +37,8 @@ class Brigader {
                    FROM brigaders b
                    LEFT JOIN ranks r ON b.rank_id = r.id
                    WHERE 1=1";
+
+        // ── Build params for filters only (NOT limit/offset) ────
         $params = [];
 
         if (!empty($filters['status'])) {
@@ -54,7 +56,6 @@ class Brigader {
             $params['rank_id'] = $filters['rank_id'];
         }
 
-        // ── GENDER FILTER (was missing) ──────────────────────────────────
         if (!empty($filters['gender'])) {
             $sql .= " AND b.gender = :gender";
             $params['gender'] = $filters['gender'];
@@ -70,23 +71,22 @@ class Brigader {
 
         $sql .= " ORDER BY b.last_name, b.first_name";
 
-        if ($limit) {
-            $sql .= " LIMIT :limit OFFSET :offset";
+        // ── Append LIMIT/OFFSET as integers directly in SQL ─────
+        // This avoids PDO type-binding issues on strict production
+        // servers where LIMIT must be a true integer not a string
+        if ($limit !== null) {
+            $sql .= " LIMIT " . (int)$limit . " OFFSET " . (int)$offset;
         }
 
+        // ── Only bind the filter params — no limit/offset params ─
         $stmt = $this->db->getConnection()->prepare($sql);
 
         foreach ($params as $key => $value) {
-            $stmt->bindValue(':' . $key, $value);
-        }
-
-        if ($limit) {
-            $stmt->bindValue(':limit',  $limit,  PDO::PARAM_INT);
-            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+            $stmt->bindValue(':' . $key, $value, PDO::PARAM_STR);
         }
 
         $stmt->execute();
-        return $stmt->fetchAll();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
     
     public function count($filters = []) {
@@ -108,7 +108,6 @@ class Brigader {
             $params['rank_id'] = $filters['rank_id'];
         }
 
-        // ── GENDER FILTER (was missing) ──────────────────────────────────
         if (!empty($filters['gender'])) {
             $sql .= " AND b.gender = :gender";
             $params['gender'] = $filters['gender'];
@@ -123,7 +122,7 @@ class Brigader {
         }
 
         $result = $this->db->fetchOne($sql, $params);
-        return $result['count'];
+        return (int)$result['count'];
     }
     
     public function update($id, $data) {
@@ -154,13 +153,12 @@ class Brigader {
                 JOIN events e ON a.event_id = e.id
                 WHERE a.brigader_id = :id
                 ORDER BY e.event_date DESC
-                LIMIT :limit";
+                LIMIT " . (int)$limit;
 
         $stmt = $this->db->getConnection()->prepare($sql);
-        $stmt->bindValue(':id',    $id,    PDO::PARAM_INT);
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
         $stmt->execute();
-        return $stmt->fetchAll();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
     
     public function uploadPassport($id, $file) {
