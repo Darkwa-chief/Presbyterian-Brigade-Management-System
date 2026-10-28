@@ -92,32 +92,59 @@ function renderPagination($pagination, $baseUrl) {
     if ($pagination['total_pages'] <= 1) {
         return '';
     }
-    
-    $html = '<nav><ul class="pagination justify-content-center">';
-    
+
+    // ── Strip any existing page parameter from the base URL ──
+    // This prevents ?page=1&page=3 double-page bugs
+    $baseUrl = preg_replace('/([&?])page=\d+/', '', $baseUrl);
+
+    // Make sure the URL has a proper connector for &page=
+    // If URL has no ? yet, use ?, otherwise use &
+    $connector = (strpos($baseUrl, '?') === false) ? '?' : '&';
+
+    // Clean up any trailing & or ? left after stripping page
+    $baseUrl = rtrim($baseUrl, '&?');
+
+    $html = '<nav aria-label="Page navigation"><ul class="pagination justify-content-center mt-3">';
+
     // Previous button
     if ($pagination['current_page'] > 1) {
-        $html .= '<li class="page-item"><a class="page-link" href="' . $baseUrl . '&page=' . ($pagination['current_page'] - 1) . '">Previous</a></li>';
+        $html .= '<li class="page-item">
+            <a class="page-link" href="' . $baseUrl . $connector . 'page=' . ($pagination['current_page'] - 1) . '">
+                &laquo; Previous
+            </a>
+        </li>';
     } else {
-        $html .= '<li class="page-item disabled"><span class="page-link">Previous</span></li>';
+        $html .= '<li class="page-item disabled">
+            <span class="page-link">&laquo; Previous</span>
+        </li>';
     }
-    
+
     // Page numbers
     for ($i = 1; $i <= $pagination['total_pages']; $i++) {
         if ($i == $pagination['current_page']) {
-            $html .= '<li class="page-item active"><span class="page-link">' . $i . '</span></li>';
+            $html .= '<li class="page-item active">
+                <span class="page-link">' . $i . '</span>
+            </li>';
         } else {
-            $html .= '<li class="page-item"><a class="page-link" href="' . $baseUrl . '&page=' . $i . '">' . $i . '</a></li>';
+            $html .= '<li class="page-item">
+                <a class="page-link" href="' . $baseUrl . $connector . 'page=' . $i . '">' . $i . '</a>
+            </li>';
         }
     }
-    
+
     // Next button
     if ($pagination['current_page'] < $pagination['total_pages']) {
-        $html .= '<li class="page-item"><a class="page-link" href="' . $baseUrl . '&page=' . ($pagination['current_page'] + 1) . '">Next</a></li>';
+        $html .= '<li class="page-item">
+            <a class="page-link" href="' . $baseUrl . $connector . 'page=' . ($pagination['current_page'] + 1) . '">
+                Next &raquo;
+            </a>
+        </li>';
     } else {
-        $html .= '<li class="page-item disabled"><span class="page-link">Next</span></li>';
+        $html .= '<li class="page-item disabled">
+            <span class="page-link">Next &raquo;</span>
+        </li>';
     }
-    
+
     $html .= '</ul></nav>';
     return $html;
 }
