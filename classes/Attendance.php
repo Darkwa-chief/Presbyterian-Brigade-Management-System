@@ -41,7 +41,7 @@ class Attendance {
     }
     
     public function getEventAttendance($eventId) {
-        $sql = "SELECT a.*, b.first_name, b.last_name, b.brigade_id, b.unit,
+        $sql = "SELECT a.*, b.first_name, b.last_name, b.brigade_id, b.unit, b.gender,
                        r.rank_name, u.full_name as marked_by_name
                 FROM attendance a
                 JOIN brigaders b ON a.brigader_id = b.id
