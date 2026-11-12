@@ -61,13 +61,17 @@ class Brigader {
             $params['gender'] = $filters['gender'];
         }
 
-        if (!empty($filters['search'])) {
-            $sql .= " AND (b.first_name LIKE :search
-                        OR b.last_name  LIKE :search
-                        OR b.brigade_id LIKE :search
-                        OR b.email      LIKE :search)";
-            $params['search'] = '%' . $filters['search'] . '%';
-        }
+    if (!empty($filters['search'])) {
+        $sql .= " AND (b.first_name LIKE :search1
+                    OR b.last_name  LIKE :search2
+                    OR b.brigade_id LIKE :search3
+                    OR b.email      LIKE :search4)";
+        $like = '%' . $filters['search'] . '%';
+        $params['search1'] = $like;
+        $params['search2'] = $like;
+        $params['search3'] = $like;
+        $params['search4'] = $like;
+    }
 
         $sql .= " ORDER BY b.last_name, b.first_name";
 
